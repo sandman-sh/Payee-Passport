@@ -1,0 +1,70 @@
+// Wire-compatible subset of the official Sui RPC v2 schema.
+// Source: https://github.com/MystenLabs/sui-apis/tree/main/proto/sui/rpc/v2
+syntax = "proto3";
+package sui.rpc.v2;
+
+service StateService {
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+service LedgerService {
+  rpc ListTransactions(ListTransactionsRequest) returns (stream ListTransactionsResponse);
+}
+
+message GetBalanceRequest {
+  string owner = 1;
+  string coin_type = 2;
+}
+
+message GetBalanceResponse {
+  Balance balance = 1;
+}
+
+message Balance {
+  string coin_type = 1;
+  uint64 balance = 3;
+  uint64 address_balance = 4;
+  uint64 coin_balance = 5;
+}
+
+message ListTransactionsRequest {
+  TransactionFilter filter = 4;
+  QueryOptions options = 5;
+}
+
+message TransactionFilter {
+  repeated TransactionTerm terms = 1;
+}
+
+message TransactionTerm {
+  repeated TransactionLiteral literals = 1;
+}
+
+message TransactionLiteral {
+  bool negated = 1;
+  oneof predicate {
+    SenderFilter sender = 2;
+  }
+}
+
+message SenderFilter {
+  string address = 1;
+}
+
+message QueryOptions {
+  uint32 limit = 1;
+  bytes after = 2;
+  bytes before = 3;
+  Ordering ordering = 4;
+}
+
+enum Ordering {
+  ORDERING_ASCENDING = 0;
+  ORDERING_DESCENDING = 1;
+}
+
+message ListTransactionsResponse {
+  ExecutedTransaction transaction = 1;
+}
+
+message ExecutedTransaction {}
