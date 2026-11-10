@@ -174,8 +174,18 @@ async function askOpenRouter({ owner, recipient, purpose, chain, savedAddress, m
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(body?.error?.message || `OpenRouter returned HTTP ${response.status}`)
-  const answer = body?.choices?.[0]?.message?.content
-  if (!answer || typeof answer !== 'string') throw new Error('OpenRouter returned no review text.')
+  const choice = body?.choices?.[0]
+  const rawContent = choice?.message?.content ?? choice?.text
+  const answer = typeof rawContent === 'string'
+    ? rawContent
+    : Array.isArray(rawContent)
+      ? rawContent.map((part) => typeof part === 'string' ? part : typeof part?.text === 'string' ? part.text : '').join('\n')
+      : ''
+  if (!answer.trim()) {
+    const finish = choice?.finish_reason ? ` (finish reason: ${choice.finish_reason})` : ''
+    const providerError = typeof body?.error?.message === 'string' ? `: ${body.error.message}` : ''
+    throw new Error(`OpenRouter returned no review text${finish}${providerError}.`)
+  }
   return answer.trim()
 }
 

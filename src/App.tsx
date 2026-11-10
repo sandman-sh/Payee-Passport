@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ConnectButton } from '@mysten/dapp-kit-react/ui'
 import { useCurrentAccount, useCurrentNetwork, useDAppKit } from '@mysten/dapp-kit-react'
+import { fromBase64 } from '@mysten/sui/utils'
+import { SuiSignMessage, SuiSignPersonalMessage, getWallets } from '@mysten/wallet-standard'
+import type { SuiSignMessageFeature } from '@mysten/wallet-standard'
 import {
   ArrowDownLeft, ArrowRight, ArrowUpRight, BadgeCheck, Check, ChevronDown, CircleHelp,
   Clock3, ExternalLink, Fingerprint, Globe2, LockKeyhole, Menu, Plus, Search,
@@ -132,9 +135,43 @@ function App() {
     if (!account) { setAuthError('Connect a Sui Testnet wallet first.'); return }
     setAuthError(''); setAuthBusy(true)
     try {
+      if (!account.chains.includes('sui:testnet')) throw new Error('This wallet account is not enabled for Sui Testnet. Switch to a Testnet account and try again.')
       const challenge = await api<{ challengeId: string; message: string }>('/api/auth/challenge', { owner: account.address })
-      const signed = await dAppKit.signPersonalMessage({ message: new TextEncoder().encode(challenge.message), account, network: 'testnet' })
-      const session = await api<{ owner: string }>('/api/auth/verify', { challengeId: challenge.challengeId, signature: signed.signature })
+      const message = new TextEncoder().encode(challenge.message)
+      let signature: string | undefined
+      let personalSigningUnavailable = !account.features.includes(SuiSignPersonalMessage)
+      if (!personalSigningUnavailable) {
+        try {
+          const signed = await dAppKit.signPersonalMessage({ message, account, network: 'testnet' })
+          signature = signed.signature
+        } catch (reason) {
+          const messageText = reason instanceof Error ? reason.message : String(reason)
+          // Some wallets advertise the standard feature but their signer only
+          // implements the legacy Sui message method. Fall back only for that
+          // capability mismatch; preserve user rejection and other errors.
+          if (messageText.includes('sui:signPersonalMessage') && account.features.includes(SuiSignMessage)) {
+            personalSigningUnavailable = true
+          } else {
+            throw reason
+          }
+        }
+      }
+      if (personalSigningUnavailable && account.features.includes(SuiSignMessage)) {
+        const wallet = getWallets().get().find((candidate) => candidate.accounts.some((walletAccount) => walletAccount.address === account.address))
+        const walletAccount = wallet?.accounts.find((candidate) => candidate.address === account.address)
+        const legacyFeature = wallet?.features[SuiSignMessage] as SuiSignMessageFeature[typeof SuiSignMessage] | undefined
+        if (!walletAccount || !legacyFeature) throw new Error('This wallet advertises message signing, but its signer is unavailable. Reconnect the wallet and try again.')
+        const signed = await legacyFeature.signMessage({ message, account: walletAccount })
+        const signedBytes = fromBase64(signed.messageBytes)
+        if (signedBytes.length !== message.length || signedBytes.some((value, index) => value !== message[index])) {
+          throw new Error('The wallet signed a different login challenge. No session was created.')
+        }
+        signature = signed.signature
+      } else if (personalSigningUnavailable) {
+        throw new Error('This account can connect, but it cannot sign a Sui login message. Choose a wallet account that supports personal-message signing.')
+      }
+      if (!signature) throw new Error('The wallet did not return a login signature.')
+      const session = await api<{ owner: string }>('/api/auth/verify', { challengeId: challenge.challengeId, signature })
       setAuthOwner(session.owner)
     } catch (reason) { setAuthError(reason instanceof Error ? reason.message : 'Wallet sign-in failed.') }
     finally { setAuthBusy(false) }

@@ -14,6 +14,8 @@
 [![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
 [![Tests](https://img.shields.io/badge/Automated%20Tests-Passing%20(6%2F6)-brightgreen?style=flat-square)](https://nodejs.org/api/test.html)
 
+[GitHub Repository](https://github.com/sandman-sh/Payee-Passport)
+
 <p align="center">
   <b>Payee Passport</b> is a wallet-gated, non-custodial pre-flight verification system for the Sui blockchain. It cross-references prospective recipient addresses against user-confirmed contacts, live on-chain telemetry retrieved through Tatum gRPC, and tamper-resistant decentralized memory stored in Walrus, synthesizing a plain-language safety evaluation with OpenRouter AI before you sign a transaction.
 </p>
@@ -41,7 +43,7 @@ In Web3 payments, transactions are final and irreversible. A single mistyped cha
 ## Key Features
 
 - **Personal Message Wallet Authentication**  
-  Zero-gas authentication utilizing Sui's native `isValidPersonalMessageSignature`. Verifies private key ownership with cryptographic nonces and issues short-lived, `HttpOnly` / `SameSite=Strict` session cookies.
+  Zero-gas authentication utilizing Sui's native `isValidPersonalMessageSignature`. Uses `sui:signPersonalMessage`, with compatibility for wallets that expose the older `sui:signMessage` feature. Verifies private key ownership with cryptographic nonces and issues short-lived, `HttpOnly` / `SameSite=Strict` session cookies. Accounts must be enabled on Testnet and support one of those personal-message signing features; connecting a wallet never signs a transaction.
 
 - **High-Performance Tatum gRPC Gateway**  
   Direct integration with Tatum's native Sui Testnet gRPC gateway using official Sui RPC v2 Protocol Buffers (`sui.rpc.v2.StateService` and `LedgerService`), querying live SUI token balances and streaming recent outgoing transactions in sub-second latency.
@@ -148,6 +150,7 @@ sequenceDiagram
 ### 1. Non-Custodial Personal Message Sign-In
 Authentication proves wallet ownership without exposing private keys or requiring on-chain gas:
 - Challenge strings bind the current timestamp, cryptographic nonce, domain origin, and network (`Sui Testnet`).
+- The client prefers `sui:signPersonalMessage` and falls back to the legacy `sui:signMessage` feature when the connected account exposes it; it confirms the signed bytes match the server challenge before submitting the signature.
 - Signatures are verified server-side with `@mysten/sui/verify` (`isValidPersonalMessageSignature`).
 - Validated sessions generate secure session tokens held in `HttpOnly`, `SameSite=Strict` cookies.
 
@@ -197,7 +200,7 @@ All sensitive credentials (`TATUM_API_KEY`, `OPENROUTER_API_KEY`, `WALRUS_MEMORY
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/payee-passport.git
+   git clone https://github.com/sandman-sh/Payee-Passport.git
    cd payee-passport
    ```
 
